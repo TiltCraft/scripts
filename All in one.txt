@@ -1,0 +1,252 @@
+--========================
+-- SERVICES
+--========================
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--========================
+-- STATES
+--========================
+local States = {
+	Noclip = false,
+	Aimbot = false,
+	ESP = false,
+	Sprint = true
+}
+
+--========================
+-- SETTINGS
+--========================
+local FOV_RADIUS = 150
+local SMOOTHNESS = 0.15
+local AIM_PART = "Head"
+
+--========================
+-- GUI (CLEAN STYLE)
+--========================
+local gui = Instance.new("ScreenGui")
+gui.Name = "AllInOneGui"
+gui.ResetOnSpawn = false
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.fromOffset(270, 300)
+frame.Position = UDim2.fromScale(0.02, 0.3)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.Active = true
+frame.Draggable = true
+
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 14)
+
+local padding = Instance.new("UIPadding", frame)
+padding.PaddingTop = UDim.new(0, 10)
+padding.PaddingBottom = UDim.new(0, 10)
+padding.PaddingLeft = UDim.new(0, 10)
+padding.PaddingRight = UDim.new(0, 10)
+
+local layout = Instance.new("UIListLayout", frame)
+layout.Padding = UDim.new(0, 8)
+
+-- Title
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.fromOffset(250, 30)
+title.BackgroundTransparency = 1
+title.Text = "All-In-One Menu"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+--========================
+-- TOGGLE BUTTON
+--========================
+local function makeToggle(name, key)
+	local btn = Instance.new("TextButton", frame)
+	btn.Size = UDim2.fromOffset(250, 32)
+	btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
+	btn.TextColor3 = Color3.fromRGB(220,220,220)
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 14
+	btn.Text = name .. ": OFF"
+	btn.AutoButtonColor = false
+
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+
+	btn.MouseButton1Click:Connect(function()
+		States[key] = not States[key]
+		btn.Text = name .. ": " .. (States[key] and "ON" or "OFF")
+		btn.BackgroundColor3 = States[key]
+			and Color3.fromRGB(65,120,65)
+			or Color3.fromRGB(45,45,45)
+
+		if key == "Aimbot" then
+			FOVCircle.Visible = States.Aimbot
+		end
+	end)
+
+	return btn
+end
+
+--========================
+-- AIMBOT FOV CIRCLE
+--========================
+local FOVCircle = Instance.new("Frame", gui)
+FOVCircle.Size = UDim2.fromOffset(FOV_RADIUS * 2, FOV_RADIUS * 2)
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Visible = false
+
+Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
+
+local stroke = Instance.new("UIStroke", FOVCircle)
+stroke.Thickness = 2
+stroke.Color = Color3.fromRGB(255,255,255)
+
+RunService.RenderStepped:Connect(function()
+	FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+end)
+
+--========================
+-- NOCLIP
+--========================
+RunService.Stepped:Connect(function()
+	if States.Noclip and LocalPlayer.Character then
+		for _, p in ipairs(LocalPlayer.Character:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.CanCollide = false
+			end
+		end
+	end
+end)
+
+makeToggle("Noclip", "Noclip")
+
+--========================
+-- SPRINT
+--========================
+local humanoid
+local NORMAL_SPEED = 16
+local SPRINT_SPEED = 32
+
+local function setupChar(char)
+	humanoid = char:WaitForChild("Humanoid")
+	humanoid.WalkSpeed = NORMAL_SPEED
+end
+
+if LocalPlayer.Character then setupChar(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(setupChar)
+
+UIS.InputBegan:Connect(function(i,gp)
+	if gp or not humanoid then return end
+	if i.KeyCode == Enum.KeyCode.LeftShift and States.Sprint then
+		humanoid.WalkSpeed = SPRINT_SPEED
+	end
+end)
+
+UIS.InputEnded:Connect(function(i)
+	if humanoid and i.KeyCode == Enum.KeyCode.LeftShift then
+		humanoid.WalkSpeed = NORMAL_SPEED
+	end
+end)
+
+makeToggle("Sprint", "Sprint")
+
+--========================
+-- AIMBOT
+--========================
+local function getTarget()
+	local closest, shortest = nil, FOV_RADIUS
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character then
+			local part = p.Character:FindFirstChild(AIM_PART)
+			local hum = p.Character:FindFirstChild("Humanoid")
+			if part and hum and hum.Health > 0 then
+				local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+				if onScreen then
+					local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+					local dist = (Vector2.new(pos.X,pos.Y) - center).Magnitude
+					if dist < shortest then
+						shortest = dist
+						closest = part
+					end
+				end
+			end
+		end
+	end
+	return closest
+end
+
+RunService.RenderStepped:Connect(function()
+	if not States.Aimbot then return end
+	local target = getTarget()
+	if target then
+		Camera.CFrame = Camera.CFrame:Lerp(
+			CFrame.new(Camera.CFrame.Position, target.Position),
+			SMOOTHNESS
+		)
+	end
+end)
+
+UIS.InputBegan:Connect(function(i,gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.Q then
+		States.Aimbot = not States.Aimbot
+		FOVCircle.Visible = States.Aimbot
+	end
+end)
+
+makeToggle("Aimbot (Q)", "Aimbot")
+
+--========================
+-- ESP + NAME TAGS
+--========================
+local function addESP(player)
+	if player == LocalPlayer or not player.Character then return end
+	local char = player.Character
+
+	if not char:FindFirstChild("ESPHighlight") then
+		local h = Instance.new("Highlight")
+		h.Name = "ESPHighlight"
+		h.FillColor = Color3.fromRGB(0,255,0)
+		h.OutlineColor = Color3.fromRGB(255,255,255)
+		h.FillTransparency = 0.5
+		h.Adornee = char
+		h.Parent = char
+	end
+
+	local head = char:FindFirstChild("Head")
+	if head and not head:FindFirstChild("ESPName") then
+		local bill = Instance.new("BillboardGui")
+		bill.Name = "ESPName"
+		bill.Adornee = head
+		bill.Size = UDim2.fromOffset(120, 30)
+		bill.StudsOffset = Vector3.new(0, 2.5, 0)
+		bill.AlwaysOnTop = true
+
+		local txt = Instance.new("TextLabel", bill)
+		txt.Size = UDim2.fromScale(1,1)
+		txt.BackgroundTransparency = 1
+		txt.Text = player.Name
+		txt.Font = Enum.Font.GothamBold
+		txt.TextSize = 14
+		txt.TextColor3 = Color3.fromRGB(255,255,255)
+		txt.TextStrokeTransparency = 0
+
+		bill.Parent = head
+	end
+end
+
+RunService.Stepped:Connect(function()
+	if States.ESP then
+		for _, p in ipairs(Players:GetPlayers()) do
+			addESP(p)
+		end
+	end
+end)
+
+makeToggle("ESP (Names)", "ESP")
